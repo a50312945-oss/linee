@@ -1,0 +1,161 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
+<title>電流小工具｜手機版</title>
+<meta name="theme-color" content="#11261e">
+<style>
+  :root{
+    --bg:#0f241d; --panel:#173428; --text:#e7f1ec; --muted:#b8cdc4; --border:#2f5347;
+    --accent:#2e5f4f; --btn:#2b5a4b; --combo-bg:#dff5e1; --combo-fg:#000;
+  }
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+  html,body{height:100%}
+  body{
+    margin:0;background:var(--bg);color:var(--text);
+    font-family:"Microsoft JhengHei","Noto Sans TC","PingFang TC","Heiti TC",system-ui,-apple-system,"Segoe UI",Roboto,"Helvetica Neue",Arial,sans-serif;
+  }
+  .wrap{max-width:540px;margin:0 auto;padding:16px}
+  .card{background:var(--panel);border:1px solid var(--border);border-radius:16px;padding:14px;margin-bottom:14px;box-shadow:0 6px 18px rgba(0,0,0,.25)}
+  .title{margin:0 0 6px;font-weight:700;font-size:20px;letter-spacing:.5px}
+  .sub{color:var(--muted);font-size:13px;margin-top:4px}
+  label{display:block;font-size:14px;margin:12px 0 6px}
+  input[type="number"],input[type="text"],select{
+    width:100%;padding:14px 14px;border-radius:12px;border:1px solid var(--border);
+    background:#0b1c16;color:var(--text);font-size:16px;outline:none;
+  }
+  /* style dropdown to light-green with black text (supported on many Android browsers) */
+  select{background:var(--combo-bg);color:var(--combo-fg)}
+  .row{display:flex;gap:10px}
+  .row > *{flex:1}
+  .checkbox{display:flex;align-items:center;gap:8px;color:var(--text);font-size:14px;margin-top:8px}
+  button{
+    width:100%;padding:15px;border:none;border-radius:14px;background:var(--btn);color:var(--text);
+    font-size:18px;font-weight:700;letter-spacing:.5px;cursor:pointer;margin-top:14px;
+  }
+  button:active{transform:translateY(1px);background:var(--accent)}
+  .mono{font-family:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,"Liberation Mono","Courier New",monospace;font-size:16px}
+  .result{white-space:pre-line;line-height:1.8;min-height:5lh}
+  .badge{display:inline-block;background:var(--accent);padding:2px 8px;border-radius:999px;font-size:12px;margin-left:6px}
+  .footer{color:var(--muted);font-size:12px;line-height:1.6}
+</style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="card">
+      <h1 class="title">電流小工具<span class="badge">手機版</span></h1>
+      <div>
+        <label for="w">容量 (W)</label>
+        <input id="w" type="number" inputmode="decimal" placeholder="例如：15000" />
+        <label for="vs">電壓系統 (V)</label>
+        <select id="vs">
+          <option value="">choose：請選擇</option>
+          <option value="4W_380">4W_380：三相四線 220/380V（V=380，/√3）</option>
+          <option value="3W_220">3W_220：三相三線 220V（V=220，/√3）</option>
+          <option value="1P3W_220">1P3W_220：單相三線 220V（V=220）</option>
+          <option value="custom">custom：自訂 V（請在下方輸入；可勾三相）</option>
+        </select>
+        <label for="v">自訂 V</label>
+        <div class="row">
+          <input id="v" type="number" inputmode="decimal" placeholder="選 custom 才需輸入" />
+        </div>
+        <label class="checkbox"><input id="is3" type="checkbox" /> 自訂為三相（/√3）</label>
+        <button id="calc">計算</button>
+        <div class="sub">公式：三相 I = (W / V) / √3 × 1.25；單相 I = (W / V) × 1.25。</div>
+      </div>
+    </div>
+    <div class="card">
+      <h2 class="title" style="font-size:18px">結果</h2>
+      <div id="out" class="mono result">按「計算」後將顯示：
+1. 電流值:
+2. 適用線徑:
+3. 適用銅牌:</div>
+    </div>
+    <div class="card footer">
+      線徑表使用三相三線/三相四線容量；單相三線套用三相三線欄位。<br>
+      若沒有對應線徑，請增大規格或採並聯。
+    </div>
+  </div>
+
+<script>
+const WIRE_TABLE = [
+  ["3.5", 30, 27],["5.5",39,35],["8",51,46],["14",74,67],["22",93,84],["30",116,104],
+  ["38",130,117],["50",155,140],["60",176,159],["80",208,187],["100",242,218],
+  ["125",277,249],["150",309,278],["60*2",350,300],["80*2",400,400],
+  ["125*2",500,null],["150*2",null,500],["80*3",600,null],["100*3",null,600],
+  ["125*3",800,null],["150*3",null,800],["125*4",1000,null],["150*4",null,1000],
+];
+const BUSBAR = [
+  [15,2,1,30,130],[15,3,1,45,150],[20,2,1,40,155],[20,3,1,60,175],[20,5,1,100,220],
+  [25,2,1,50,200],[25,3,1,75,250],[25,5,1,125,330],[30,3,1,90,305],[30,5,1,150,370],
+  [30,5,2,300,820],[40,3,1,120,420],[40,5,1,200,715],[40,5,2,400,1230],[50,5,1,250,585],
+  [50,10,1,500,875],[50,10,2,1000,1600],[60,5,1,300,700],[60,8,1,480,875],[60,10,1,600,1170],
+  [60,10,2,1200,1790],[80,5,1,400,1230],[80,10,1,800,1300],[80,10,2,1600,1920],
+  [80,10,3,2400,3310],[80,10,4,3200,4250],[100,5,1,500,1650],[100,10,1,1000,2735],
+  [100,10,2,2000,3950],[100,10,3,3000,5010],[100,10,4,4000,5280],[120,10,2,2400,3100],
+  [120,10,3,3600,4200],[120,10,4,4800,5280],
+];
+
+function prettyAmp(x){
+  if (!isFinite(x)) return "NaN";
+  const abs = Math.abs(x);
+  if (abs === 0) return "0";
+  if (abs >= 1e5 || abs < 1e-3) return x.toExponential(5);
+  return parseFloat(x.toPrecision(6)).toString();
+}
+
+function resolveVPhase() {
+  const sel = document.getElementById('vs').value;
+  if (!sel) throw new Error("尚未選擇「電壓系統 (V)」");
+  if (sel === "4W_380") return {V:380, is3:true, B:4};
+  if (sel === "3W_220") return {V:220, is3:true, B:3};
+  if (sel === "1P3W_220") return {V:220, is3:false, B:2};
+  const v = parseFloat(document.getElementById('v').value);
+  if (!isFinite(v) || v <= 0) throw new Error("已選擇自訂 V，但未輸入數值");
+  const is3 = document.getElementById('is3').checked;
+  return {V:v, is3:is3, B:is3?3:2};
+}
+
+function pickWire(I, isFourW){
+  for (const row of WIRE_TABLE){
+    const [size, a3, a4] = row;
+    const cap = isFourW ? a4 : a3;
+    if (cap == null) continue;
+    if (cap >= I) return size;
+  }
+  return null;
+}
+
+function pickBusbar(I){
+  // 依 AC 容量由小到大挑第一個可滿足者
+  const byAC = BUSBAR.slice().sort((a,b)=> (a[4]??1e9)-(b[4]??1e9));
+  for (const r of byAC){
+    const cap = r[4];
+    if (cap == null) continue;
+    if (cap >= I) return {w:r[0], t:r[1], p:r[2]};
+  }
+  return null;
+}
+
+document.getElementById('calc').addEventListener('click', () => {
+  const out = document.getElementById('out');
+  try{
+    const W = parseFloat(document.getElementById('w').value);
+    if (!isFinite(W) || W <= 0) throw new Error("請輸入正確的容量 (W)");
+    const {V, is3, B} = resolveVPhase();
+    const I = (W / V) / (is3 ? Math.sqrt(3) : 1) * 1.25;
+    const wire = pickWire(I, B === 4);
+    const bus  = pickBusbar(I);
+
+    const line1 = `1. 電流值: ${prettyAmp(I)} (A)`;
+    const line2 = `2. 適用線徑: ${wire ? ("XLPE " + wire + " mm²") : "（無對應，請增大規格或改並聯）"}`;
+    const line3 = bus ? `3. 適用銅牌: [Cu bus ${bus.w}×${bus.t} mm × ${bus.p}片/相]x_${B}` : `3. 適用銅牌: （無對應，請增大規格）`;
+    out.textContent = [line1, line2, line3].join("\n");
+  }catch(e){
+    out.textContent = "⚠️ " + e.message;
+  }
+});
+</script>
+</body>
+</html>
